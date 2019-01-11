@@ -1,6 +1,5 @@
 $ = Cypress.$.bind(Cypress)
 _ = Cypress._
-Keyboard = Cypress.Keyboard
 Promise = Cypress.Promise
 $selection = require("../../../../../src/dom/selection")
 

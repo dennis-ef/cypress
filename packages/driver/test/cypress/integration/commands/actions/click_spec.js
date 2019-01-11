@@ -156,6 +156,23 @@ describe('src/cy/commands/actions/click', function () {
       })
     })
 
+    it('sends pointer and mouse events in order', () => {
+      const events = []
+
+      const $btn = cy.$$('#button')
+
+      _.each('pointerdown mousedown pointerup mouseup click'.split(' '), (event) => {
+        return $btn.get(0).addEventListener(event, () => {
+          return events.push(event)
+        })
+      }
+      )
+
+      return cy.get('#button').click().then(() => {
+        return expect(events).to.deep.eq(['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'])
+      })
+    })
+
     it('records correct clientX when el scrolled', (done) => {
       const $btn = $('<button id=\'scrolledBtn\' style=\'position: absolute; top: 1600px; left: 1200px; width: 100px;\'>foo</button>').appendTo(cy.$$('body'))
 
@@ -201,7 +218,7 @@ describe('src/cy/commands/actions/click', function () {
         return expect(e.defaultPrevented).to.be.true
       })
 
-      _.each('mouseup click'.split(' '), (event) => {
+      _.each('pointerdown pointerup mouseup click'.split(' '), (event) => {
         return $btn.get(0).addEventListener(event, () => {
           return events.push(event)
         })
@@ -209,7 +226,7 @@ describe('src/cy/commands/actions/click', function () {
       )
 
       return cy.get('#button').click().then(() => {
-        return expect(events).to.deep.eq(['mouseup', 'click'])
+        return expect(events).to.deep.eq(['pointerup', 'mouseup', 'click'])
       })
     })
 
@@ -263,6 +280,24 @@ describe('src/cy/commands/actions/click', function () {
       return cy.contains('button').click()
     })
 
+    it('does not fire some events when element has been removed on pointerdown', function () {
+      const $btn = cy.$$('button:first')
+
+      $btn.on('pointerdown', function () {
+        // synchronously remove this button
+        return $(this).remove()
+      })
+      const focusMouseEvents = ['focus', 'focusin', 'mousedown', 'pointerup', 'mouseup', 'click']
+
+      focusMouseEvents.forEach((eventName) => {
+        $btn.on(eventName, () => {
+          return fail(`should not have gotten ${eventName}`)
+        })
+      })
+
+      return cy.contains('button').click()
+    })
+
     it('does not fire a click when element has been removed on mouseup', function () {
       const $btn = cy.$$('button:first')
 
@@ -274,6 +309,24 @@ describe('src/cy/commands/actions/click', function () {
       $btn.on('click', () => {
         return fail('should not have gotten click')
       })
+
+      return cy.contains('button').click()
+    })
+
+    it.only('does not fire a click or mouseup when element has been removed on pointerup', function () {
+      const $btn = cy.$$('button:first')
+
+      $btn.on('pointerup', function () {
+        // synchronously remove this button
+        return $(this).remove()
+      })
+
+      ;['mouseup', 'click'].forEach((eventName) => {
+        return $btn.on(eventName, () => {
+          return fail(`should not have gotten ${eventName}`)
+        })
+      }
+      )
 
       return cy.contains('button').click()
     })
@@ -1309,7 +1362,7 @@ describe('src/cy/commands/actions/click', function () {
         .focused().should('have.id', 'button-covered-in-span')
       })
 
-      return it('will not fire focus events when nothing can receive focus', () => {
+      it('will not fire focus events when nothing can receive focus', () => {
         const onFocus = cy.stub()
 
         const win = cy.state('window')
@@ -1326,27 +1379,17 @@ describe('src/cy/commands/actions/click', function () {
           return expect(onFocus).not.to.be.called
         })
       })
+
+      it('will fire pointerdown event', () => {
+        // cy.get('input').eq(1).click()
+        // cy.get('input').eq(2).click()
+        // cy.get('input').eq(4).click()
+        cy.get('textarea:first').click()
+        // cy.get('input').eq(3).click()
+        cy.get('input:first').click()
+        // cy.get('input').eq(1).click()
+      })
     })
-
-    // it "events", ->
-    //   $btn = cy.$$("button")
-    //   win = $(cy.state("window"))
-
-    //   _.each {"btn": btn, "win": win}, (type, key) ->
-    //     _.each "focus mousedown mouseup click".split(" "), (event) ->
-    //     # _.each "focus focusin focusout mousedown mouseup click".split(" "), (event) ->
-    //       type.get(0).addEventListener event, (e) ->
-    //         if key is "btn"
-    //           # e.preventDefault()
-    //           e.stopPropagation()
-
-    //         console.log "#{key} #{event}", e
-
-    // $btn.on "mousedown", (e) ->
-    // console.log("btn mousedown")
-    // e.preventDefault()
-
-    // win.on "mousedown", -> console.log("win mousedown")
 
     describe('errors', function () {
       beforeEach(function () {
@@ -1638,7 +1681,7 @@ describe('src/cy/commands/actions/click', function () {
       })
     })
 
-    return describe('.log', function () {
+    describe('.log', function () {
       beforeEach(function () {
         this.logs = []
 
@@ -1813,12 +1856,26 @@ describe('src/cy/commands/actions/click', function () {
         })
 
         return cy.get('input:first').click().then(function () {
-          return expect(this.lastLog.invoke('consoleProps').groups()).to.deep.eq([
+          expect(this.lastLog.invoke('consoleProps').groups()).to.deep.eq([
+            {
+              name: 'PointerDown',
+              items: {
+                preventedDefault: true,
+                stoppedPropagation: true,
+              },
+            },
             {
               name: 'MouseDown',
               items: {
                 preventedDefault: true,
                 stoppedPropagation: true,
+              },
+            },
+            {
+              name: 'PointerUp',
+              items: {
+                preventedDefault: false,
+                stoppedPropagation: false,
               },
             },
             {
@@ -1844,10 +1901,24 @@ describe('src/cy/commands/actions/click', function () {
           return false
         })
 
-        return cy.get('input:first').click().then(function () {
-          return expect(this.lastLog.invoke('consoleProps').groups()).to.deep.eq([
+        cy.get('input:first').click().then(function () {
+          expect(this.lastLog.invoke('consoleProps').groups()).to.deep.eq([
+            {
+              name: 'PointerDown',
+              items: {
+                preventedDefault: false,
+                stoppedPropagation: false,
+              },
+            },
             {
               name: 'MouseDown',
+              items: {
+                preventedDefault: false,
+                stoppedPropagation: false,
+              },
+            },
+            {
+              name: 'PointerUp',
               items: {
                 preventedDefault: false,
                 stoppedPropagation: false,
@@ -1863,8 +1934,8 @@ describe('src/cy/commands/actions/click', function () {
             {
               name: 'Click',
               items: {
-                preventedDefault: false,
-                stoppedPropagation: false,
+                preventedDefault: true,
+                stoppedPropagation: true,
               },
             },
           ])
@@ -1879,7 +1950,21 @@ describe('src/cy/commands/actions/click', function () {
         return cy.get('input:first').click().then(function () {
           return expect(this.lastLog.invoke('consoleProps').groups()).to.deep.eq([
             {
+              name: 'PointerDown',
+              items: {
+                preventedDefault: true,
+                stoppedPropagation: true,
+              },
+            },
+            {
               name: 'MouseDown',
+              items: {
+                preventedDefault: true,
+                stoppedPropagation: true,
+              },
+            },
+            {
+              name: 'PointerUp',
               items: {
                 preventedDefault: false,
                 stoppedPropagation: false,
@@ -1888,15 +1973,15 @@ describe('src/cy/commands/actions/click', function () {
             {
               name: 'MouseUp',
               items: {
-                preventedDefault: false,
-                stoppedPropagation: false,
+                preventedDefault: true,
+                stoppedPropagation: true,
               },
             },
             {
               name: 'Click',
               items: {
-                preventedDefault: true,
-                stoppedPropagation: true,
+                preventedDefault: false,
+                stoppedPropagation: false,
               },
             },
           ])
@@ -1911,7 +1996,23 @@ describe('src/cy/commands/actions/click', function () {
         return cy.get('input:first').type('{ctrl}{shift}', { release: false }).click().then(function () {
           expect(this.lastLog.invoke('consoleProps').groups()).to.deep.eq([
             {
+              name: 'PointerDown',
+              items: {
+                preventedDefault: false,
+                stoppedPropagation: false,
+                modifiers: 'ctrl, shift',
+              },
+            },
+            {
               name: 'MouseDown',
+              items: {
+                preventedDefault: false,
+                stoppedPropagation: false,
+                modifiers: 'ctrl, shift',
+              },
+            },
+            {
+              name: 'PointerUp',
               items: {
                 preventedDefault: false,
                 stoppedPropagation: false,
@@ -1951,6 +2052,13 @@ describe('src/cy/commands/actions/click', function () {
         return cy.contains('button').click().then(function () {
           return expect(this.lastLog.invoke('consoleProps').groups()).to.deep.eq([
             {
+              name: 'PointerDown',
+              items: {
+                preventedDefault: false,
+                stoppedPropagation: false,
+              },
+            },
+            {
               name: 'MouseDown',
               items: {
                 preventedDefault: false,
@@ -1972,7 +2080,21 @@ describe('src/cy/commands/actions/click', function () {
         return cy.contains('button').click().then(function () {
           return expect(this.lastLog.invoke('consoleProps').groups()).to.deep.eq([
             {
+              name: 'PointerDown',
+              items: {
+                preventedDefault: false,
+                stoppedPropagation: false,
+              },
+            },
+            {
               name: 'MouseDown',
+              items: {
+                preventedDefault: false,
+                stoppedPropagation: false,
+              },
+            },
+            {
+              name: 'PointerUp',
               items: {
                 preventedDefault: false,
                 stoppedPropagation: false,
@@ -2094,7 +2216,7 @@ describe('src/cy/commands/actions/click', function () {
     })
 
     // TODO: fix this once we implement aborting / restoring / reset
-    it.skip('can cancel multiple dblclicks', function (done) {
+    it('can cancel multiple dblclicks', function (done) {
       let dblclicks = 0
 
       const spy = this.sandbox.spy(() => {

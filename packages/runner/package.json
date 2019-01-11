@@ -32,6 +32,8 @@
     "chai": "4.2.0",
     "chai-enzyme": "1.0.0-beta.1",
     "classnames": "2.2.6",
+    "diff": "^4.0.1",
+    "diff2html": "^2.7.0",
     "enzyme": "3.7.0",
     "enzyme-adapter-react-16": "1.7.1",
     "font-awesome": "4.7.0",
